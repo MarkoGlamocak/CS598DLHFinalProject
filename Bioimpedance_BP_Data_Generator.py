@@ -1,271 +1,207 @@
 import numpy as np
 import pandas as pd
-from scipy import signal
+import os
+from pathlib import Path
 import random
+from scipy.interpolate import interp1d
 
-class BioimpedanceBPDataGenerator:
-    def __init__(self, n_subjects=11, n_beats_per_subject=2000):
-        self.n_subjects = n_subjects
-        self.n_beats_per_subject = n_beats_per_subject
-        self.sampling_rate = 100  # 100 Hz as mentioned in paper
-        
-        # Set random seed for reproducibility
-        np.random.seed(42)
-        random.seed(42)
-        
-        # Subject-specific baseline variations
-        self.subject_variations = self._generate_subject_variations()
-        
-    def _generate_subject_variations(self):
-        """Generate subject-specific baseline variations"""
-        variations = {}
-        for subject_id in range(1, self.n_subjects + 1):
-            variations[subject_id] = {
-                'dbp_baseline': np.random.uniform(65, 75),  # Baseline DBP varies by subject
-                'sbp_baseline': np.random.uniform(105, 115),  # Baseline SBP varies by subject
-                'impedance_baseline': np.random.uniform(80, 120),  # Baseline impedance
-                'amplitude_scaling': np.random.uniform(0.8, 1.2),  # Overall amplitude scaling
-                'noise_level': np.random.uniform(0.02, 0.05)  # Subject-specific noise
+# Create data directory if it doesn't exist
+Path("data").mkdir(exist_ok=True)
+
+# Set random seed for reproducibility
+np.random.seed(42)
+random.seed(42)
+
+# Define physiological parameters for different activities
+ACTIVITY_PARAMS = {
+    'rest': {
+        'dbp_range': (60, 75),
+        'sbp_range': (100, 120),
+        'heart_rate': (65, 75),
+        'bioimpedance_amplitude': (0.8, 1.2),
+        'noise_level': 0.02
+    },
+    'light_exercise': {
+        'dbp_range': (65, 85),
+        'sbp_range': (115, 135),
+        'heart_rate': (75, 95),
+        'bioimpedance_amplitude': (0.9, 1.4),
+        'noise_level': 0.03
+    },
+    'intense_exercise': {
+        'dbp_range': (75, 90),
+        'sbp_range': (130, 150),
+        'heart_rate': (95, 120),
+        'bioimpedance_amplitude': (1.0, 1.8),
+        'noise_level': 0.04
+    },
+    'recovery': {
+        'dbp_range': (68, 82),
+        'sbp_range': (110, 130),
+        'heart_rate': (80, 90),
+        'bioimpedance_amplitude': (0.85, 1.3),
+        'noise_level': 0.025
+    }
+}
+
+def generate_bioimpedance_waveform(time_points, amplitude, phase_shift=0):
+    """Generate a realistic bioimpedance waveform for one heartbeat"""
+    # Create a characteristic bioimpedance curve with multiple phases
+    t = time_points
+    
+    # Main waveform - combination of peaks representing arterial pulsation
+    wave = (
+        0.7 * amplitude * np.exp(-((t - (0.2 + phase_shift)) ** 2) / (2 * 0.02 ** 2)) +  # Diastolic peak
+        amplitude * np.exp(-((t - (0.4 + phase_shift)) ** 2) / (2 * 0.03 ** 2)) +      # Systolic peak
+        0.3 * amplitude * np.exp(-((t - (0.5 + phase_shift)) ** 2) / (2 * 0.02 ** 2)) +  # Dicrotic notch
+        0.2 * amplitude * np.exp(-((t - (0.7 + phase_shift)) ** 2) / (2 * 0.04 ** 2))   # Diastolic component
+    )
+    
+    # Add baseline impedance
+    baseline = 0.5 + 0.1 * np.sin(2 * np.pi * t * 0.5)
+    
+    return wave + baseline
+
+def generate_subject_data(subject_id, beats_per_activity=500):
+    """Generate bioimpedance data for a single subject"""
+    # Subject-specific characteristics
+    subject_baseline_dbp = np.random.uniform(65, 75)
+    subject_baseline_sbp = np.random.uniform(110, 125)
+    subject_impedance_baseline = np.random.uniform(0.4, 0.6)
+    subject_artery_delay = np.random.uniform(0.01, 0.03)  # Phase delay between arteries
+    
+    all_data = []
+    beat_counter = 0
+    
+    # Generate data for each activity type
+    for activity, params in ACTIVITY_PARAMS.items():
+        for _ in range(beats_per_activity):
+            beat_counter += 1
+            
+            # Generate blood pressure values with subject-specific baseline
+            dbp = np.clip(np.random.normal(
+                (params['dbp_range'][0] + params['dbp_range'][1]) / 2,
+                (params['dbp_range'][1] - params['dbp_range'][0]) / 6
+            ) + (subject_baseline_dbp - 70), params['dbp_range'][0], params['dbp_range'][1])
+            
+            sbp = np.clip(np.random.normal(
+                (params['sbp_range'][0] + params['sbp_range'][1]) / 2,
+                (params['sbp_range'][1] - params['sbp_range'][0]) / 6
+            ) + (subject_baseline_sbp - 117.5), params['sbp_range'][0], params['sbp_range'][1])
+            
+            # Ensure physiological constraint: SBP > DBP
+            if sbp <= dbp:
+                sbp = dbp + np.random.uniform(20, 40)
+            
+            # Generate heart rate
+            heart_rate = np.random.uniform(*params['heart_rate'])
+            beat_duration = 60 / heart_rate
+            
+            # Generate timing information
+            timing = np.random.uniform(0, 1)  # Beat timing within cardiac cycle
+            
+            # Generate bioimpedance signals for 4 channels
+            time_points = np.linspace(0, 1, 1000)  # High resolution for realistic signals
+            amplitudes = np.random.uniform(*params['bioimpedance_amplitude'], size=4)
+            
+            # Channel 1: Ulnar artery, proximal
+            channel1 = generate_bioimpedance_waveform(time_points, amplitudes[0] * subject_impedance_baseline)
+            
+            # Channel 2: Radial artery, proximal  
+            channel2 = generate_bioimpedance_waveform(time_points, amplitudes[1] * subject_impedance_baseline, 
+                                                     phase_shift=subject_artery_delay)
+            
+            # Channel 3: Ulnar artery, distal
+            channel3 = generate_bioimpedance_waveform(time_points, amplitudes[2] * subject_impedance_baseline,
+                                                     phase_shift=np.random.uniform(0.05, 0.1))
+            
+            # Channel 4: Radial artery, distal
+            channel4 = generate_bioimpedance_waveform(time_points, amplitudes[3] * subject_impedance_baseline,
+                                                     phase_shift=subject_artery_delay + np.random.uniform(0.05, 0.1))
+            
+            # Add realistic noise
+            noise = np.random.normal(0, params['noise_level'], size=(4, 1000))
+            channels = [channel1, channel2, channel3, channel4]
+            
+            for i in range(4):
+                channels[i] += noise[i]
+            
+            # Take one point from each channel to match the original data structure
+            sample_idx = int(timing * 999)  # Convert timing to sample index
+            channel_values = [channel[sample_idx] for channel in channels]
+            
+            # Calculate derivatives at the sample point
+            derivatives = []
+            for channel in channels:
+                if sample_idx > 0 and sample_idx < 999:
+                    derivative = (channel[sample_idx + 1] - channel[sample_idx - 1]) / 2
+                else:
+                    derivative = channel[1] - channel[0] if sample_idx == 0 else channel[-1] - channel[-2]
+                derivatives.append(derivative)
+            
+            # Store data
+            data_row = {
+                'Subject_ID': subject_id,
+                'Beat_Number': beat_counter,
+                'Activity': activity,
+                'Channel1': channel_values[0],
+                'Channel2': channel_values[1],
+                'Channel3': channel_values[2],
+                'Channel4': channel_values[3],
+                'Channel1_Derivative': derivatives[0],
+                'Channel2_Derivative': derivatives[1],
+                'Channel3_Derivative': derivatives[2],
+                'Channel4_Derivative': derivatives[3],
+                'Timing': timing,
+                'DBP': dbp,
+                'SBP': sbp
             }
-        return variations
-    
-    def _generate_activity_sequence(self):
-        """Generate realistic activity sequence"""
-        activities = []
-        bp_values = []
-        
-        # Define activity parameters
-        activity_params = {
-            'rest': {
-                'duration_range': (300, 500),  # beats
-                'dbp_range': (60, 75),
-                'sbp_range': (100, 120),
-                'transition_rate': 'slow'
-            },
-            'light_exercise': {
-                'duration_range': (200, 400),
-                'dbp_range': (65, 85),
-                'sbp_range': (115, 135),
-                'transition_rate': 'medium'
-            },
-            'intense_exercise': {
-                'duration_range': (100, 200),
-                'dbp_range': (75, 90),
-                'sbp_range': (130, 150),
-                'transition_rate': 'fast'
-            },
-            'recovery': {
-                'duration_range': (150, 300),
-                'dbp_range': (70, 85),
-                'sbp_range': (110, 130),
-                'transition_rate': 'slow'
-            }
-        }
-        
-        current_beat = 0
-        current_dbp = 67.5  # Starting values
-        current_sbp = 110
-        
-        # Generate activity sequence
-        activity_sequence = ['rest', 'light_exercise', 'intense_exercise', 'recovery']
-        
-        while current_beat < self.n_beats_per_subject:
-            for activity in activity_sequence:
-                if current_beat >= self.n_beats_per_subject:
-                    break
-                    
-                params = activity_params[activity]
-                duration = random.randint(*params['duration_range'])
-                target_dbp = random.uniform(*params['dbp_range'])
-                target_sbp = random.uniform(*params['sbp_range'])
-                
-                # Generate transition with realistic smoothing
-                for i in range(min(duration, self.n_beats_per_subject - current_beat)):
-                    # Transition rate based on activity
-                    if params['transition_rate'] == 'slow':
-                        alpha = 0.02
-                    elif params['transition_rate'] == 'medium':
-                        alpha = 0.05
-                    else:  # fast
-                        alpha = 0.1
-                    
-                    # Smooth transition to target BP
-                    current_dbp = current_dbp * (1 - alpha) + target_dbp * alpha
-                    current_sbp = current_sbp * (1 - alpha) + target_sbp * alpha
-                    
-                    # Add physiological variation
-                    dbp_variation = np.random.normal(0, 1.5)
-                    sbp_variation = np.random.normal(0, 2.5)
-                    
-                    final_dbp = current_dbp + dbp_variation
-                    final_sbp = current_sbp + sbp_variation
-                    
-                    activities.append(activity)
-                    bp_values.append((final_dbp, final_sbp))
-                    current_beat += 1
-        
-        return activities, bp_values
-    
-    def _generate_bioimpedance_signal(self, subject_id, activity, dbp, sbp):
-        """Generate realistic bioimpedance signal for one beat"""
-        var = self.subject_variations[subject_id]
-        
-        # Signal length for one heartbeat (~1 second at 100 Hz)
-        signal_length = 100
-        t = np.linspace(0, 1, signal_length)
-        
-        # Base impedance waveform (simplified representation)
-        base_impedance = var['impedance_baseline'] * np.ones(signal_length)
-        
-        # Add characteristic peaks based on BP
-        # Main systolic peak
-        peak_amp = (sbp - var['sbp_baseline']) / 50 * var['amplitude_scaling']
-        peak_time = 0.3  # Approximate timing of systolic peak
-        systolic_peak = peak_amp * np.exp(-((t - peak_time) ** 2) / (2 * 0.05 ** 2))
-        
-        # Diastolic component (smaller)
-        diastolic_amp = (dbp - var['dbp_baseline']) / 50 * var['amplitude_scaling'] * 0.3
-        diastolic_time = 0.45
-        diastolic_peak = diastolic_amp * np.exp(-((t - diastolic_time) ** 2) / (2 * 0.08 ** 2))
-        
-        # Combine components
-        impedance_signal = base_impedance + systolic_peak + diastolic_peak
-        
-        # Add activity-dependent noise
-        if activity == 'intense_exercise':
-            noise_factor = 1.5
-        elif activity == 'light_exercise':
-            noise_factor = 1.2
-        else:
-            noise_factor = 1.0
             
-        noise = np.random.normal(0, var['noise_level'] * noise_factor, signal_length)
-        impedance_signal += noise
-        
-        # Apply signal artifacts based on activity
-        if activity in ['light_exercise', 'intense_exercise']:
-            motion_artifact = 0.3 * np.sin(2 * np.pi * 0.5 * t) * (activity == 'intense_exercise' and 2 or 1)
-            impedance_signal += motion_artifact
-        
-        return impedance_signal
+            all_data.append(data_row)
     
-    def _extract_characteristic_points(self, impedance_signal):
-        """Extract characteristic points from impedance signal"""
-        # Find peaks and important points
-        diastolic_idx = np.argmin(impedance_signal[:30])  # Early diastolic minimum
-        systolic_idx = np.argmax(impedance_signal[20:70]) + 20  # Main systolic peak
-        
-        # Find inflection point (approximation)
-        derivative = np.diff(impedance_signal)
-        inflection_idx = np.argmax(derivative[:40])  # Before systolic peak
-        
-        # Find foot point
-        foot_idx = np.argmin(impedance_signal[:inflection_idx])
-        
-        return {
-            'diastolic_peak': impedance_signal[diastolic_idx],
-            'maximum_slope': derivative[inflection_idx],
-            'systolic_foot': impedance_signal[foot_idx],
-            'inflection_point': impedance_signal[inflection_idx]
-        }
-    
-    def generate_four_channel_measurements(self, impedance_signal):
-        """Generate measurements for 4 bioimpedance channels (ulnar and radial arteries)"""
-        channels = []
-        
-        # Generate 4 channels with slight variations (representing different electrode positions)
-        for i in range(4):
-            # Add channel-specific variation
-            channel_var = 1 + np.random.normal(0, 0.05)
-            # Add slight delay to simulate different measurement locations
-            delay = int(np.random.uniform(-3, 3))
-            
-            if delay < 0:
-                # Create a copy of the signal, apply roll, and then overwrite the affected portion
-                channel_signal = np.roll(impedance_signal.copy(), delay)
-                # Fill the wrapped portion with the unwrapped data
-                channel_signal[:delay] = impedance_signal[-delay:]
-                channel_signal = channel_signal * channel_var
-            elif delay > 0:
-                # Create a copy of the signal, apply roll, and then overwrite the affected portion
-                channel_signal = np.roll(impedance_signal.copy(), delay)
-                # Fill the wrapped portion with the unwrapped data
-                channel_signal[:delay] = impedance_signal[:delay]
-                channel_signal = channel_signal * channel_var
-            else:
-                # No delay, just apply scaling
-                channel_signal = impedance_signal.copy() * channel_var
-            
-            channels.append(channel_signal)
-        
-        return channels
-    
-    def generate_dataset(self):
-        """Generate complete synthetic dataset"""
-        all_data = []
-        
-        for subject_id in range(1, self.n_subjects + 1):
-            print(f"Generating data for Subject {subject_id}...")
-            
-            # Generate activity sequence and BP values
-            activities, bp_values = self._generate_activity_sequence()
-            
-            for beat_num in range(self.n_beats_per_subject):
-                activity = activities[beat_num]
-                dbp, sbp = bp_values[beat_num]
-                
-                # Generate bioimpedance signal
-                impedance_signal = self._generate_bioimpedance_signal(
-                    subject_id, activity, dbp, sbp
-                )
-                
-                # Generate 4 channel measurements
-                channels = self.generate_four_channel_measurements(impedance_signal)
-                
-                # Calculate derivatives and timing
-                derivatives = [np.diff(channel) for channel in channels]
-                timing = np.linspace(0, 1, 100)  # 1 second per beat
-                
-                # Extract representative values for CSV (using middle of signal)
-                mid_idx = 50  # Middle of 100-sample signal
-                
-                row_data = {
-                    'Subject_ID': subject_id,
-                    'Beat_Number': beat_num + 1,
-                    'Activity': activity,
-                    'Channel_1': channels[0][mid_idx],
-                    'Channel_2': channels[1][mid_idx],
-                    'Channel_3': channels[2][mid_idx],
-                    'Channel_4': channels[3][mid_idx],
-                    'Channel_1_Derivative': derivatives[0][mid_idx] if mid_idx < len(derivatives[0]) else derivatives[0][-1],
-                    'Channel_2_Derivative': derivatives[1][mid_idx] if mid_idx < len(derivatives[1]) else derivatives[1][-1],
-                    'Channel_3_Derivative': derivatives[2][mid_idx] if mid_idx < len(derivatives[2]) else derivatives[2][-1],
-                    'Channel_4_Derivative': derivatives[3][mid_idx] if mid_idx < len(derivatives[3]) else derivatives[3][-1],
-                    'Timing': timing[mid_idx],
-                    'DBP': dbp,
-                    'SBP': sbp
-                }
-                
-                all_data.append(row_data)
-        
-        # Create DataFrame
-        df = pd.DataFrame(all_data)
-        
-        return df
+    return pd.DataFrame(all_data)
 
-# Generate the dataset
-print("Starting dataset generation...")
-generator = BioimpedanceBPDataGenerator(n_subjects=11, n_beats_per_subject=2000)
-dataset = generator.generate_dataset()
+# Generate data for all 11 subjects
+print("Generating bioimpedance dataset for 11 subjects...")
+for subject_id in range(1, 12):
+    print(f"Generating data for Subject {subject_id}...")
+    
+    # Generate data
+    subject_data = generate_subject_data(subject_id)
+    
+    # Save to CSV
+    filename = f"data/subject_{subject_id:02d}.csv"
+    subject_data.to_csv(filename, index=False)
+    
+    print(f"Saved {len(subject_data)} beats to {filename}")
 
-# Save to CSV
-output_file = 'bioimpedance_bp_dataset.csv'
-dataset.to_csv(output_file, index=False)
+print("\nDataset generation complete!")
+print(f"Generated files in 'data' directory:")
+for file in sorted(os.listdir("data")):
+    print(f"  - {file}")
 
-print(f"\nDataset generated successfully!")
-print(f"Total records: {len(dataset)}")
-print(f"Saved to: {output_file}")
-print("\nDataset preview:")
-print(dataset.head())
-print("\nSummary statistics:")
-print(dataset.describe())
+# Generate summary statistics
+summary_data = []
+for subject_id in range(1, 12):
+    df = pd.read_csv(f"data/subject_{subject_id:02d}.csv")
+    summary = {
+        'Subject_ID': subject_id,
+        'Total_Beats': len(df),
+        'DBP_Mean': df['DBP'].mean(),
+        'DBP_Std': df['DBP'].std(),
+        'SBP_Mean': df['SBP'].mean(),
+        'SBP_Std': df['SBP'].std(),
+        'Activities': df['Activity'].value_counts().to_dict()
+    }
+    summary_data.append(summary)
+
+summary_df = pd.DataFrame(summary_data)
+summary_df.to_csv("data/dataset_summary.csv", index=False)
+
+print("\nDataset Summary:")
+print(f"Total subjects: 11")
+print(f"Total beats per subject: ~2000")
+print(f"Activities included: rest, light_exercise, intense_exercise, recovery")
+print(f"Blood pressure ranges preserved across activities")
+print(f"Subject-specific variations implemented")
+print("\nDataset ready for training!")
