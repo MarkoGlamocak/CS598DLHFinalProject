@@ -70,12 +70,12 @@ pip3 install -r requirements.txt
 
 1. **Generate synthetic dataset**: (already present)
    ```bash
-   python bioimpedance_data_generator.py
+   python3 bioimpedance_data_generator.py
    ```
 
 2. **Run experiments**:
    ```bash
-   python experiment_runner.py
+   python3 experiment_runner.py
    ```
 
 ## Model Architecture
