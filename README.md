@@ -68,7 +68,7 @@ pip3 install -r requirements.txt
 
 ### Running the Code
 
-1. **Generate synthetic dataset**:
+1. **Generate synthetic dataset**: (already present)
    ```bash
    python bioimpedance_data_generator.py
    ```
