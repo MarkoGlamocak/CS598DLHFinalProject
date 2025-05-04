@@ -63,7 +63,7 @@ git clone https://github.com/MarkoGlamocak/CS598DLHFinalProject.git
 cd CS598DLHFinalProject
 
 # Install dependencies
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ### Running the Code
