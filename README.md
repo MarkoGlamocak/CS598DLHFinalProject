@@ -59,8 +59,8 @@ This implementation focuses on applying Domain-Adversarial Neural Networks (DANN
 
 ```bash
 # Clone the repository
-git clone https://github.com/MarkoGlamocak/cufflessbp_dann.git
-cd cufflessbp_dann
+git clone https://github.com/MarkoGlamocak/CS598DLHFinalProject.git
+cd CS598DLHFinalProject
 
 # Install dependencies
 pip install -r requirements.txt
