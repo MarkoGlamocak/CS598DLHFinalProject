@@ -5,10 +5,18 @@ from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
 import flip_gradient2
+import random
 import os
 
-# Assuming the data_preprocess function is imported from main.py
+# Assuming the data_preprocess function is imported from data_preparation.py
 from data_preparation import data_preprocess
+
+def set_seeds(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 class DomainAdversarialModel:
     def __init__(self, lstm_units=30, dropout_rate=0.7, learning_rate=0.003):
@@ -417,6 +425,9 @@ def run_experiment(subjects_data, test_subject_idx, source_subject_idx=None, tar
 
 
 def main():
+    # Set seeds for reproducibility
+    set_seeds(42)
+
     # Load and preprocess data for all subjects
     # Assuming data_preprocess returns a dictionary of (X, y_dbp, y_sbp) tuples for each subject
     subjects_data = data_preprocess()
