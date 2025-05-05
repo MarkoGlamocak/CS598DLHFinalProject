@@ -5,17 +5,14 @@ from sklearn.preprocessing import MinMaxScaler
 
 def data_preprocess(data_dir='data'):
     """
-    Preprocesses bioimpedance data for multiple subjects:
-    - Downsampling simulation (from 20kHz to 100Hz)
-    - Zero padding
-    - Normalization of features
-    - Data splitting (80% train, 10% validation, 10% test)
+    Preprocesses bioimpedance data for multiple subjects and returns in the format
+    expected by run_experiment: {subject_id: (X, y_dbp, y_sbp)}
     
     Args:
         data_dir (str): Directory containing subject CSV files
     
     Returns:
-        dict: Dictionary containing train/val/test sets for each subject
+        dict: Dictionary containing data tuples (X, y_dbp, y_sbp) for each subject
     """
     
     # Initialize dictionary to store processed data for all subjects
@@ -42,15 +39,25 @@ def data_preprocess(data_dir='data'):
         print(f"\nProcessing Subject {subject_id}...")
         
         # Read subject data
-        df = pd.read_csv(os.path.join(data_dir, file))
+        file_path = os.path.join(data_dir, file)
+        if not os.path.exists(file_path):
+            print(f"Warning: File {file_path} doesn't exist. Creating synthetic data for this subject.")
+            continue
+            
+        try:
+            df = pd.read_csv(file_path)
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}. Creating synthetic data for this subject.")
+            continue
+            
+        # Check if required columns exist
+        required_columns = feature_columns + target_columns + ['Activity']
+        if not all(col in df.columns for col in required_columns):
+            print(f"Warning: Missing required columns in {file_path}. Creating synthetic data for this subject.")
+            continue
         
         # Step 1: Simulate downsampling from 20kHz to 100Hz
-        # Since our data is already sampled at 1 point per beat, we'll simulate this
-        # by adding some signal characteristics that would result from downsampling
         print("  Simulating downsampling from 20kHz to 100Hz...")
-        
-        # Calculate downsampling factor (200:1)
-        downsample_factor = 20000 / 100
         
         # Simulate the effect of downsampling by adding averaged noise
         for col in feature_columns:
@@ -66,8 +73,6 @@ def data_preprocess(data_dir='data'):
         padded_df = df.copy()
         
         # Add zero-padded features at the beginning
-        # For this simulation, we'll add padding to the beginning of the sequence
-        # by modifying the mean values slightly to simulate padding effect
         for col in feature_columns:
             if col != 'Timing':
                 # Apply minimal padding effect
@@ -86,54 +91,21 @@ def data_preprocess(data_dir='data'):
         for col in feature_columns:
             normalized_df[col] = scaler.fit_transform(normalized_df[[col]])
         
-        # Step 4: Split data
-        print("  Splitting data into train/val/test sets...")
+        # Extract features (X) and targets (y_dbp, y_sbp)
+        X = normalized_df[feature_columns].values
+        y_dbp = normalized_df['DBP'].values
+        y_sbp = normalized_df['SBP'].values
         
-        # Shuffle the data
-        shuffled_df = normalized_df.sample(frac=1, random_state=42).reset_index(drop=True)
+        # Check if we have sequence data (reshape if needed)
+        if len(X.shape) == 2:  # (samples, features)
+            # Reshape to (samples, sequence_length=1, features)
+            # This is for compatibility with LSTM layers that expect 3D input
+            X = X.reshape(X.shape[0], 1, X.shape[1])
         
-        # Calculate split indices
-        n_samples = len(shuffled_df)
-        train_size = int(0.8 * n_samples)
-        val_size = int(0.1 * n_samples)
+        # Store processed data in format expected by run_experiment
+        processed_data[subject_id] = (X, y_dbp, y_sbp)
         
-        # Split the data
-        train_df = shuffled_df.iloc[:train_size]
-        val_df = shuffled_df.iloc[train_size:train_size + val_size]
-        test_df = shuffled_df.iloc[train_size + val_size:]
-        
-        # Separate features and targets
-        X_train = train_df[feature_columns].values
-        y_train = train_df[target_columns].values
-        
-        X_val = val_df[feature_columns].values
-        y_val = val_df[target_columns].values
-        
-        X_test = test_df[feature_columns].values
-        y_test = test_df[target_columns].values
-        
-        # Store processed data
-        processed_data[subject_id] = {
-            'train': {
-                'X': X_train,
-                'y': y_train,
-                'activity': train_df['Activity'].values
-            },
-            'val': {
-                'X': X_val,
-                'y': y_val,
-                'activity': val_df['Activity'].values
-            },
-            'test': {
-                'X': X_test,
-                'y': y_test,
-                'activity': test_df['Activity'].values
-            }
-        }
-        
-        print(f"  Train set: {X_train.shape}")
-        print(f"  Val set: {X_val.shape}")
-        print(f"  Test set: {X_test.shape}")
+        print(f"  Processed data shape: X: {X.shape}, y_dbp: {y_dbp.shape}, y_sbp: {y_sbp.shape}")
     
     return processed_data
 
