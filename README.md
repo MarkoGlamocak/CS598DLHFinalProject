@@ -1,135 +1,135 @@
-# CS598DLHFinalProject
+# Blood Pressure Estimation using Domain-Adversarial Neural Networks (DANN)
 
-# Domain-Adversarial Neural Networks for Blood Pressure Estimation
+This repository implements the approach described in the paper "Developing Personalized Models of Blood Pressure Estimation from Wearable Sensors Data Using Minimally-trained Domain Adversarial Neural Networks" using synthetic bioimpedance data.
 
-This repository contains the implementation of the paper "Developing Personalized Models of Blood Pressure Estimation from Wearable Sensors Data Using Minimally-trained Domain Adversarial Neural Networks" by Zhang et al.
+## Overview
 
-## Project Overview
+This project demonstrates how to use Domain-Adversarial Neural Networks (DANN) to create personalized blood pressure estimation models with minimal training data. The DANN approach allows for knowledge transfer between subjects, enabling accurate blood pressure estimation with as little as 3-5 minutes of training data from a new subject.
 
-This implementation focuses on applying Domain-Adversarial Neural Networks (DANN) to enable personalized blood pressure estimation with minimal training data. The key challenge addressed is reducing the amount of calibration data required from a new user while maintaining clinical-grade accuracy (within ISO standards).
-
-## Key Components
-
-1. **Data Generation and Preprocessing**:
-   - Synthetic dataset generator for bioimpedance signals
-   - Data preprocessing pipeline simulating the paper's approach
-
-2. **Base MTL BP Estimation Model**:
-   - LSTM-based feature extractor
-   - Shared dense layer
-   - Dual task-specific networks for diastolic and systolic blood pressure
-
-3. **Domain-Adversarial Neural Network (DANN)**:
-   - Feature extractor (shared with the base model)
-   - BP estimator
-   - Domain classifier with gradient reversal
-   - Implementation of adversarial training methodology
-
-4. **Experiment Framework**:
-   - Testing with different amounts of training data (3, 4, and 5 minutes)
-   - Comparison between baseline, pretrained, and DANN approaches
-   - Evaluation using RMSE, correlation, and ISO standard compliance
-
-## Repository Structure
-
-```
-.
-├── data/                      # Directory for datasets
-├── results/                   # Directory for experimental results
-├── main.py                    # Data preprocessing module
-├── dann_bp_model.py           # Implementation of BP estimation models
-├── experiment_runner.py       # Experiment execution and evaluation
-├── bioimpedance_data_generator.py  # Synthetic dataset generator
-└── README.md                  # Project documentation
-```
-
-## Getting Started
-
-### Prerequisites
+## Requirements
 
 - Python 3.6+
 - TensorFlow 2.x
 - NumPy
 - Pandas
 - Matplotlib
-- SciPy
 - scikit-learn
 
-### Installation
+## Installation
 
+1. Clone this repository:
 ```bash
-# Clone the repository
 git clone https://github.com/MarkoGlamocak/CS598DLHFinalProject.git
-cd CS598DLHFinalProject
-
-# Install dependencies
-pip3 install -r requirements.txt
+cd bp_dann
 ```
 
-### Running the Code
+2. Install the required packages:
+```bash
+pip3 install tensorflow numpy pandas matplotlib scikit-learn
+```
 
-1. **Generate synthetic dataset**: (already present)
-   ```bash
-   python3 bioimpedance_data_generator.py
-   ```
+## Data Preparation
 
-2. **Run experiments**:
-   ```bash
-   python3 experiment_runner.py
-   ```
+1. Place your bioimpedance dataset in a directory named `data/` in the root of the project.
+   
+2. The data should be structured as CSV files named according to the format `subject_XX.csv` (where XX is the subject ID, e.g., `subject_01.csv`, `subject_02.csv`, etc.).
 
-## Model Architecture
+3. Each CSV file should contain the following columns:
+   - `Subject_ID`: Integer
+   - `Beat_Number`: Integer
+   - `Activity`: String (category of physical activity)
+   - `Channel1`: Float (bioimpedance channel 1)
+   - `Channel2`: Float (bioimpedance channel 2)
+   - `Channel3`: Float (bioimpedance channel 3)
+   - `Channel4`: Float (bioimpedance channel 4)
+   - `Channel1_Derivative`: Float
+   - `Channel2_Derivative`: Float
+   - `Channel3_Derivative`: Float
+   - `Channel4_Derivative`: Float
+   - `Timing`: Float
+   - `DBP`: Float (diastolic blood pressure)
+   - `SBP`: Float (systolic blood pressure)
 
-### Base MTL Model
+## Running the Code
 
-The base model consists of:
-- An LSTM layer to process the 9-dimensional input sequences
-- A shared dense layer to extract features
-- Two task-specific networks for diastolic and systolic blood pressure
-- Dropout layers for regularization
+1. Make sure that the `flip_gradient.py` and `bp_dann.py` files are in the root directory of the project.
 
-### DANN Model
+2. Run the training script:
+```bash
+python3 run_training.py
+```
 
-The DANN approach extends the base model with:
-- A domain classifier that tries to predict which subject a beat belongs to
-- A gradient reversal layer between the feature extractor and domain classifier
-- Adversarial training mechanism to force the feature extractor to learn subject-invariant features
+This script will:
+- Train three separate models using 3, 4, and 5 minutes of training data
+- Run each training for 100 epochs
+- Save the trained models and results
 
-## Training Approach
+## File Structure
 
-The adversarial training follows the algorithm defined in the paper:
+- `flip_gradient.py`: Implements the gradient reversal layer for domain adaptation
+- `bp_dann.py`: Main implementation of the DANN approach for blood pressure estimation
+- `run_training.py`: Script to run training with different amounts of data
+- `data/`: Directory containing subject CSV files
+- `checkpoints/`: Directory where trained models are saved
+- `results/`: Directory where evaluation results and plots are saved
 
-- θBP = θBP + α · ∂LBP/∂θBP
-- θd = θd + α · λ · ∂Ld/∂θd
-- θf = θf + α · (-λ · ∂Ld/∂θf + ∂LBP/∂θf)
+## Understanding the Results
+
+After training completes, the script will display a summary of results for each training duration:
+
+```
+SUMMARY OF RESULTS
+================================================================================
+Minutes     DBP RMSE      SBP RMSE      DBP r      SBP r      DBP %      SBP %    
+--------------------------------------------------------------------------------
+3           x.xx          x.xx          x.xx       x.xx       xx.x       xx.x     
+4           x.xx          x.xx          x.xx       x.xx       xx.x       xx.x     
+5           x.xx          x.xx          x.xx       x.xx       xx.x       xx.x     
+```
 
 Where:
-- θBP, θd, θf are parameters for BP estimator, domain classifier, and feature extractor
-- LBP is the loss for BP estimation: ∑(EiS - TiS)² + (EiD - TiD)²
-- Ld is the cross-entropy loss for domain classification
-- α is the learning rate
-- λ is the loss weight balancing BP estimator and domain classifier
+- `DBP RMSE`: Root mean square error for diastolic blood pressure (mmHg)
+- `SBP RMSE`: Root mean square error for systolic blood pressure (mmHg)
+- `DBP r`: Correlation coefficient for diastolic blood pressure
+- `SBP r`: Correlation coefficient for systolic blood pressure
+- `DBP %`: Percentage of diastolic blood pressure estimates within 10 mmHg of reference
+- `SBP %`: Percentage of systolic blood pressure estimates within 10 mmHg of reference
 
-## Experimental Results
+The ISO standard requires at least 85% of measurements to be within 10 mmHg of the reference. 
+Please note the code doesn't currently meet this for SBP.
 
-The experiments test the DANN model with different amounts of training data (3, 4, and 5 minutes) and compare it with:
-1. Directly training the base model with limited data
-2. Using a pretrained model from another subject
+## Visualizations
 
-Key metrics include:
-- Root Mean Square Error (RMSE) in mmHg
-- Correlation coefficient (R)
-- ISO standard compliance (percentage of measurements within 10 mmHg)
+The training process generates several visualizations in the `results/` directory:
 
-## Acknowledgments
+1. Bland-Altman plots showing the agreement between predicted and reference blood pressure values
+2. Scatter plots showing the correlation between predicted and reference blood pressure values
 
-This project is based on the following paper:
+These plots are useful for visually assessing the performance of the models.
+
+## How DANN Works
+
+Domain-Adversarial Neural Networks (DANN) use adversarial training to learn domain-invariant features:
+
+1. A feature extractor network extracts features from bioimpedance signals
+2. A blood pressure estimator network predicts DBP and SBP from these features
+3. A domain classifier tries to identify which subject the data came from
+4. The feature extractor is trained to maximize blood pressure estimation accuracy while minimizing domain classification accuracy
+
+This adversarial approach forces the model to learn features that are useful for blood pressure estimation but are not specific to individual subjects, enabling better generalization to new subjects with minimal training data.
+
+## Troubleshooting
+
+- If you encounter memory issues, try reducing the batch size by modifying the `batch_size` parameter in the `DataGenerator` class.
+- If training is unstable, try adjusting the learning rate or domain adaptation parameter schedule.
+- If you receive dimension mismatch errors, ensure that all your data files have consistent shapes and formats.
+
+## Citation
+
+If you use this code in your research, please cite the original paper:
+
 ```
 Zhang, L., Hurley, N. C., Ibrahim, B., Spatz, E., Krumholz, H. M., Jafari, R., & Mortazavi, B. J. (2020). 
-Developing Personalized Models of Blood Pressure Estimation from Wearable Sensors Data Using 
-Minimally-trained Domain Adversarial Neural Networks. Proceedings of Machine Learning Research, 126, 97-120.
+Developing Personalized Models of Blood Pressure Estimation from Wearable Sensors Data Using Minimally-trained 
+Domain Adversarial Neural Networks. Proceedings of Machine Learning Research, 126, 97-120.
 ```
-
-## License
-
-This project is licensed under the MIT License.
