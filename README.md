@@ -20,7 +20,7 @@ This project demonstrates how to use Domain-Adversarial Neural Networks (DANN) t
 1. Clone this repository:
 ```bash
 git clone https://github.com/MarkoGlamocak/CS598DLHFinalProject.git
-cd bp_dann
+cd CS598DLHFinalProject
 ```
 
 2. Install the required packages:
@@ -30,7 +30,10 @@ pip3 install tensorflow numpy pandas matplotlib scikit-learn
 
 ## Data Preparation
 
-1. Place your bioimpedance dataset in a directory named `data/` in the root of the project.
+1. Place your bioimpedance dataset in a directory named `data/` in the root of the project. You can use `Bioimpedance_BP_Data_Generator.py` to generate synthetic data by running the following command:
+```bash
+python3 Bioimpedance_BP_Data_Generator.py
+```
    
 2. The data should be structured as CSV files named according to the format `subject_XX.csv` (where XX is the subject ID, e.g., `subject_01.csv`, `subject_02.csv`, etc.).
 
@@ -66,6 +69,7 @@ This script will:
 
 ## File Structure
 
+- `Bioimpedance_BP_Data_Generator.py`: Generates synthetic bioimpedance dataset
 - `flip_gradient.py`: Implements the gradient reversal layer for domain adaptation
 - `bp_dann.py`: Main implementation of the DANN approach for blood pressure estimation
 - `run_training.py`: Script to run training with different amounts of data
