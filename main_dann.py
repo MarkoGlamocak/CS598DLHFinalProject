@@ -132,6 +132,8 @@ class DomainAdversarialModel:
         }
     
     def plot_bland_altman(self, metrics, save_path=None):
+        plt.ioff()
+
         # Bland-Altman plots for DBP
         dbp_mean = (metrics['dbp_pred'] + metrics['dbp_true']) / 2
         dbp_diff = metrics['dbp_pred'] - metrics['dbp_true']
@@ -178,7 +180,7 @@ class DomainAdversarialModel:
         if save_path:
             plt.savefig(save_path)
         
-        plt.show()
+        plt.close()
 
 
 class DataGenerator(tf.keras.utils.Sequence):
@@ -429,36 +431,91 @@ def main():
     set_seeds(42)
 
     # Load and preprocess data for all subjects
-    # Assuming data_preprocess returns a dictionary of (X, y_dbp, y_sbp) tuples for each subject
     subjects_data = data_preprocess()
     
     # Test different durations of training data
     test_durations = [3, 4, 5]  # minutes
     
-    # Select test subject (change this to test different subjects)
-    test_subject_idx = list(subjects_data.keys())[0]  # Use the first key in the dictionary
+    # Number of runs for robustness
+    num_runs = 10
     
-    results = {}
+    # Store results for all subjects
+    all_results = {}
     
-    for test_mins in test_durations:
-        print(f"\n=== Testing with {test_mins} minutes of training data ===")
-        metrics, _, _ = run_experiment(
-            subjects_data, 
-            test_subject_idx=test_subject_idx,
-            test_mins=test_mins,
-            epochs=100,
-            batch_size=100
-        )
+    # Get all subject IDs
+    all_subject_ids = list(subjects_data.keys())
+    print(f"Testing {len(all_subject_ids)} subjects")
+    
+    # Test each subject as the test subject
+    for test_subject_idx in all_subject_ids:
+        print(f"\n===== Testing Subject {test_subject_idx} as Test Subject =====")
         
-        results[test_mins] = metrics
+        # Results for this subject across different training durations and runs
+        subject_results = {}
+        
+        for test_mins in test_durations:
+            print(f"\n=== Testing with {test_mins} minutes of training data ===")
+            
+            # Initialize results for this duration
+            duration_results = []
+            
+            # Get available subjects to use as source and target
+            available_indices = [i for i in all_subject_ids if i != test_subject_idx]
+            
+            # Make sure we have at least 2 other subjects
+            if len(available_indices) < 2:
+                print("Need at least 3 subjects for this experiment")
+                continue
+            
+            # Run the test multiple times for robustness
+            for run in range(num_runs):
+                print(f"Run {run+1}/{num_runs}")
+                
+                # Randomly select source and target domains
+                # Using random.sample to get 2 unique subjects
+                selected_indices = random.sample(available_indices, 2)
+                source_subject_idx = selected_indices[0]
+                target_subject_idx = selected_indices[1]
+                
+                print(f"Using Subject {source_subject_idx} as source and Subject {target_subject_idx} as target")
+                
+                metrics, _, _ = run_experiment(
+                    subjects_data, 
+                    test_subject_idx=test_subject_idx,
+                    source_subject_idx=source_subject_idx,
+                    target_subject_idx=target_subject_idx,
+                    test_mins=test_mins,
+                    epochs=100,
+                    batch_size=100
+                )
+                
+                duration_results.append(metrics)
+            
+            # Calculate average metrics across all runs
+            avg_metrics = {
+                'dbp_rmse': np.mean([m['dbp_rmse'] for m in duration_results]),
+                'sbp_rmse': np.mean([m['sbp_rmse'] for m in duration_results]),
+                'dbp_corr': np.mean([m['dbp_corr'] for m in duration_results]),
+                'sbp_corr': np.mean([m['sbp_corr'] for m in duration_results]),
+                'dbp_within_10': np.mean([m['dbp_within_10'] for m in duration_results]),
+                'sbp_within_10': np.mean([m['sbp_within_10'] for m in duration_results]),
+                'individual_runs': duration_results
+            }
+            
+            subject_results[test_mins] = avg_metrics
+        
+        # Store results for this subject
+        all_results[test_subject_idx] = subject_results
     
-    # Print summary of results
-    print("\n=== Summary of Results ===")
-    print("Training Minutes | DBP RMSE | SBP RMSE | DBP % within 10mmHg | SBP % within 10mmHg")
-    print("---------------- | -------- | -------- | ------------------ | ------------------")
-    for mins, metrics in results.items():
-        print(f"{mins:16d} | {metrics['dbp_rmse']:8.2f} | {metrics['sbp_rmse']:8.2f} | "
-              f"{metrics['dbp_within_10']:18.2f} | {metrics['sbp_within_10']:18.2f}")
+    # Print summary of average results for all subjects
+    print("\n===== Summary of Average Results Across 10 Runs for All Subjects =====")
+    print("Subject | Training Minutes | DBP RMSE | SBP RMSE | DBP % within 10mmHg | SBP % within 10mmHg")
+    print("------- | --------------- | -------- | -------- | ------------------ | ------------------")
+    
+    for subject_idx, results in all_results.items():
+        for mins, metrics in results.items():
+            print(f"{subject_idx:7d} | {mins:15d} | {metrics['dbp_rmse']:8.2f} | {metrics['sbp_rmse']:8.2f} | "
+                  f"{metrics['dbp_within_10']:18.2f} | {metrics['sbp_within_10']:18.2f}")
 
 
 if __name__ == "__main__":
