@@ -1,27 +1,40 @@
 import tensorflow as tf
+from tensorflow.keras import backend as K
+from tensorflow.keras.layers import Layer
 
-@tf.custom_gradient
-def flip_gradient(x, lambda_value=1.0):
+class GradientReversal(Layer):
     """
-    Custom gradient function for the gradient reversal layer.
-    """
-    def grad(dy):
-        return -lambda_value * dy, None
+    Gradient Reversal Layer for Domain-Adversarial Neural Networks.
     
-    return x, grad
-
-class GradientReversal(tf.keras.layers.Layer):
-    """
-    Gradient Reversal Layer for TensorFlow 2.x
-    """
-    def __init__(self, lambda_value=1.0):
-        super(GradientReversal, self).__init__()
-        self.lambda_value = lambda_value
+    This layer implements the gradient reversal operation described in:
+    "Domain-Adversarial Training of Neural Networks" by Ganin et al. (2016)
     
-    def call(self, inputs):
-        return flip_gradient(inputs, self.lambda_value)
+    The forward pass is the identity operation, but the gradient in the backward 
+    pass is multiplied by -lambda.
+    """
+    
+    def __init__(self, lambda_=1.0, **kwargs):
+        super(GradientReversal, self).__init__(**kwargs)
+        self.lambda_ = lambda_
+        self.supports_masking = True
+    
+    def call(self, inputs, **kwargs):
+        return inputs
     
     def get_config(self):
         config = super(GradientReversal, self).get_config()
-        config.update({'lambda_value': self.lambda_value})
+        config.update({"lambda_": self.lambda_})
         return config
+    
+    def compute_output_shape(self, input_shape):
+        return input_shape
+    
+    @tf.custom_gradient
+    def grad_reverse(self, x):
+        y = tf.identity(x)
+        def custom_grad(dy):
+            return -self.lambda_ * dy
+        return y, custom_grad
+
+    def build(self, input_shape):
+        self.built = True

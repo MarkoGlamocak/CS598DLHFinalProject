@@ -211,8 +211,8 @@ def test_different_lambda_values():
         sbp_output = tf.keras.layers.Dense(1, name='sbp_output')(sbp_dense2)
         
         # Domain Classifier with custom lambda
-        import flip_gradient2
-        grl = flip_gradient2.GradientReversal(lambda_=lambda_val)(shared_features)
+        import flip_gradient
+        grl = flip_gradient.GradientReversal(lambda_=lambda_val)(shared_features)
         domain_dense1 = tf.keras.layers.Dense(15, activation='relu')(grl)
         domain_dense2 = tf.keras.layers.Dense(10, activation='relu')(domain_dense1)
         domain_output = tf.keras.layers.Dense(3, activation='softmax', name='domain_output')(domain_dense2)

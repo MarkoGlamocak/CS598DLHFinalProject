@@ -1,4 +1,4 @@
-from bp_dann import train_and_evaluate
+from delete_later.bp_dann import train_and_evaluate
 import os
 
 if __name__ == "__main__":

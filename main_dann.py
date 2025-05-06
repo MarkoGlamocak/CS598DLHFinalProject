@@ -4,7 +4,7 @@ from tensorflow.keras import layers, models, optimizers
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
-import flip_gradient2
+import flip_gradient
 import random
 import os
 
@@ -50,7 +50,7 @@ class DomainAdversarialModel:
         sbp_output = layers.Dense(1, name='sbp_output')(sbp_dense2)
         
         # Domain Classifier with Gradient Reversal Layer
-        grl = flip_gradient2.GradientReversal(lambda_=1.0)(shared_features)
+        grl = flip_gradient.GradientReversal(lambda_=1.0)(shared_features)
         domain_dense1 = layers.Dense(15, activation='relu')(grl)
         domain_dense2 = layers.Dense(10, activation='relu')(domain_dense1)
         domain_output = layers.Dense(num_domains, activation='softmax', name='domain_output')(domain_dense2)
@@ -130,57 +130,87 @@ class DomainAdversarialModel:
             'dbp_true': y_dbp_test,
             'sbp_true': y_sbp_test
         }
-    
-    def plot_bland_altman(self, metrics, save_path=None):
-        plt.ioff()
 
-        # Bland-Altman plots for DBP
-        dbp_mean = (metrics['dbp_pred'] + metrics['dbp_true']) / 2
-        dbp_diff = metrics['dbp_pred'] - metrics['dbp_true']
-        dbp_mean_diff = np.mean(dbp_diff)
-        dbp_std_diff = np.std(dbp_diff)
-        
-        plt.figure(figsize=(12, 5))
-        
-        # DBP Bland-Altman
-        plt.subplot(1, 2, 1)
-        plt.scatter(dbp_mean, dbp_diff, alpha=0.5)
-        plt.axhline(y=dbp_mean_diff, color='r', linestyle='-', label=f'Mean: {dbp_mean_diff:.2f}')
-        plt.axhline(y=dbp_mean_diff + 1.96 * dbp_std_diff, color='g', linestyle='--', 
-                   label=f'+1.96 SD: {dbp_mean_diff + 1.96 * dbp_std_diff:.2f}')
-        plt.axhline(y=dbp_mean_diff - 1.96 * dbp_std_diff, color='g', linestyle='--', 
-                   label=f'-1.96 SD: {dbp_mean_diff - 1.96 * dbp_std_diff:.2f}')
-        plt.xlabel('Mean of Predicted and True DBP (mmHg)')
-        plt.ylabel('Difference (Predicted - True) DBP (mmHg)')
-        plt.title('Bland-Altman Plot for DBP')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        
-        # SBP Bland-Altman
-        sbp_mean = (metrics['sbp_pred'] + metrics['sbp_true']) / 2
-        sbp_diff = metrics['sbp_pred'] - metrics['sbp_true']
-        sbp_mean_diff = np.mean(sbp_diff)
-        sbp_std_diff = np.std(sbp_diff)
-        
-        plt.subplot(1, 2, 2)
-        plt.scatter(sbp_mean, sbp_diff, alpha=0.5)
-        plt.axhline(y=sbp_mean_diff, color='r', linestyle='-', label=f'Mean: {sbp_mean_diff:.2f}')
-        plt.axhline(y=sbp_mean_diff + 1.96 * sbp_std_diff, color='g', linestyle='--', 
-                   label=f'+1.96 SD: {sbp_mean_diff + 1.96 * sbp_std_diff:.2f}')
-        plt.axhline(y=sbp_mean_diff - 1.96 * sbp_std_diff, color='g', linestyle='--', 
-                   label=f'-1.96 SD: {sbp_mean_diff - 1.96 * sbp_std_diff:.2f}')
-        plt.xlabel('Mean of Predicted and True SBP (mmHg)')
-        plt.ylabel('Difference (Predicted - True) SBP (mmHg)')
-        plt.title('Bland-Altman Plot for SBP')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        
-        plt.tight_layout()
-        
-        if save_path:
-            plt.savefig(save_path)
-        
-        plt.close()
+
+def plot_consolidated_bland_altman(all_runs_metrics, test_subject_idx, test_mins, save_dir='results'):
+    """
+    Generate consolidated Bland-Altman plots for all runs of a specific duration.
+    
+    Parameters:
+    all_runs_metrics: List of metrics dictionaries from all runs
+    test_subject_idx: Subject ID for the test subject
+    test_mins: Number of minutes used for training (3, 4, or 5)
+    save_dir: Directory to save the plots
+    """
+    plt.ioff()
+    
+    os.makedirs(save_dir, exist_ok=True)
+    
+    all_dbp_pred = []
+    all_dbp_true = []
+    all_sbp_pred = []
+    all_sbp_true = []
+    
+    for metrics in all_runs_metrics:
+        all_dbp_pred.extend(metrics['dbp_pred'])
+        all_dbp_true.extend(metrics['dbp_true'])
+        all_sbp_pred.extend(metrics['sbp_pred'])
+        all_sbp_true.extend(metrics['sbp_true'])
+    
+    all_dbp_pred = np.array(all_dbp_pred)
+    all_dbp_true = np.array(all_dbp_true)
+    all_sbp_pred = np.array(all_sbp_pred)
+    all_sbp_true = np.array(all_sbp_true)
+    
+    dbp_mean = (all_dbp_pred + all_dbp_true) / 2
+    dbp_diff = all_dbp_pred - all_dbp_true
+    dbp_mean_diff = np.mean(dbp_diff)
+    dbp_std_diff = np.std(dbp_diff)
+    
+    sbp_mean = (all_sbp_pred + all_sbp_true) / 2
+    sbp_diff = all_sbp_pred - all_sbp_true
+    sbp_mean_diff = np.mean(sbp_diff)
+    sbp_std_diff = np.std(sbp_diff)
+    
+    plt.figure(figsize=(12, 5))
+
+    # DBP Bland-Altman
+    plt.subplot(1, 2, 1)
+    plt.scatter(dbp_mean, dbp_diff, alpha=0.3, s=10)
+    plt.axhline(y=dbp_mean_diff, color='r', linestyle='-', label=f'Mean: {dbp_mean_diff:.2f}')
+    plt.axhline(y=dbp_mean_diff + 1.96 * dbp_std_diff, color='g', linestyle='--', 
+                label=f'+1.96 SD: {dbp_mean_diff + 1.96 * dbp_std_diff:.2f}')
+    plt.axhline(y=dbp_mean_diff - 1.96 * dbp_std_diff, color='g', linestyle='--', 
+                label=f'-1.96 SD: {dbp_mean_diff - 1.96 * dbp_std_diff:.2f}')
+    plt.xlabel('Mean of Predicted and True DBP (mmHg)')
+    plt.ylabel('Difference (Predicted - True) DBP (mmHg)')
+    plt.title(f'Bland-Altman Plot for DBP - {test_mins} minutes training')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # SBP Bland-Altman
+    plt.subplot(1, 2, 2)
+    plt.scatter(sbp_mean, sbp_diff, alpha=0.3, s=10)  # Smaller points with more transparency
+    plt.axhline(y=sbp_mean_diff, color='r', linestyle='-', label=f'Mean: {sbp_mean_diff:.2f}')
+    plt.axhline(y=sbp_mean_diff + 1.96 * sbp_std_diff, color='g', linestyle='--', 
+                label=f'+1.96 SD: {sbp_mean_diff + 1.96 * sbp_std_diff:.2f}')
+    plt.axhline(y=sbp_mean_diff - 1.96 * sbp_std_diff, color='g', linestyle='--', 
+                label=f'-1.96 SD: {sbp_mean_diff - 1.96 * sbp_std_diff:.2f}')
+    plt.xlabel('Mean of Predicted and True SBP (mmHg)')
+    plt.ylabel('Difference (Predicted - True) SBP (mmHg)')
+    plt.title(f'Bland-Altman Plot for SBP - {test_mins} minutes training')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    save_path = os.path.join(save_dir, f'consolidated_bland_altman_subject{test_subject_idx}_{test_mins}mins.png')
+    plt.savefig(save_path)
+    plt.close()
+    
+    print(f"Consolidated Bland-Altman plot saved to {save_path}")
+    
+    return save_path
 
 
 class DataGenerator(tf.keras.utils.Sequence):
@@ -419,16 +449,15 @@ def run_experiment(subjects_data, test_subject_idx, source_subject_idx=None, tar
     print(f"Evaluating on test subject (Subject {test_subject_idx})...")
     metrics = dann_model.evaluate(X_test_eval, y_dbp_test_eval, y_sbp_test_eval)
     
-    # Plot Bland-Altman
-    save_path = f"bland_altman_subject{test_subject_idx}_{test_mins}mins.png"
-    dann_model.plot_bland_altman(metrics, save_path)
-    
     return metrics, history, dann_model
 
 
 def main():
     # Set seeds for reproducibility
     set_seeds(42)
+
+    results_dir = 'bland_altman_plots'
+    os.makedirs(results_dir, exist_ok=True)
 
     # Load and preprocess data for all subjects
     subjects_data = data_preprocess()
@@ -452,6 +481,12 @@ def main():
         
         # Results for this subject across different training durations and runs
         subject_results = {}
+
+        consolidated_metrics_by_duration = {
+            3: [],
+            4: [],
+            5: []
+        }
         
         for test_mins in test_durations:
             print(f"\n=== Testing with {test_mins} minutes of training data ===")
@@ -489,6 +524,9 @@ def main():
                 )
                 
                 duration_results.append(metrics)
+                
+                # Store metrics for consolidated Bland-Altman plot
+                consolidated_metrics_by_duration[test_mins].append(metrics)
             
             # Calculate average metrics across all runs
             avg_metrics = {
@@ -502,6 +540,13 @@ def main():
             }
             
             subject_results[test_mins] = avg_metrics
+
+            plot_consolidated_bland_altman(
+                consolidated_metrics_by_duration[test_mins],
+                test_subject_idx,
+                test_mins,
+                save_dir=results_dir
+            )
         
         # Store results for this subject
         all_results[test_subject_idx] = subject_results
@@ -545,7 +590,7 @@ def main():
                 mean_dbp_within_10, mean_sbp_within_10))
     
     print("Results have been saved to 'dann_results_summary.txt'")
-
+    print(f"Consolidated Bland-Altman plots have been saved to the '{results_dir}' directory")
 
 if __name__ == "__main__":
     main()

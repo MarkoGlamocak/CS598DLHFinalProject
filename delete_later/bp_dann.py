@@ -8,7 +8,7 @@ from tensorflow.keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
-from flip_gradient import GradientReversal
+from delete_later.flip_gradient import GradientReversal
 import pandas as pd
 
 
