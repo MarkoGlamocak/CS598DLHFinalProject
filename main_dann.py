@@ -472,7 +472,6 @@ def main():
                 print(f"Run {run+1}/{num_runs}")
                 
                 # Randomly select source and target domains
-                # Using random.sample to get 2 unique subjects
                 selected_indices = random.sample(available_indices, 2)
                 source_subject_idx = selected_indices[0]
                 target_subject_idx = selected_indices[1]
@@ -507,15 +506,45 @@ def main():
         # Store results for this subject
         all_results[test_subject_idx] = subject_results
     
-    # Print summary of average results for all subjects
-    print("\n===== Summary of Average Results Across 10 Runs for All Subjects =====")
-    print("Subject | Training Minutes | DBP RMSE | SBP RMSE | DBP % within 10mmHg | SBP % within 10mmHg")
-    print("------- | --------------- | -------- | -------- | ------------------ | ------------------")
+    with open('dann_results_summary.txt', 'w') as file:
+        for test_mins in test_durations:
+            file.write(f"\n===== Summary of Average Results Across 10 Runs for All Subjects (Training Minutes = {test_mins}) =====\n")
+            file.write("Subject | Training Minutes | DBP RMSE | SBP RMSE | DBP R | SBP R | DBP % within 10mmHg | SBP % within 10mmHg\n")
+            file.write("------- | ---------------- | -------- | -------- | ----- | ----- | ------------------- | -------------------\n")
+            
+            all_dbp_rmse = []
+            all_sbp_rmse = []
+            all_dbp_corr = []
+            all_sbp_corr = []
+            all_dbp_within_10 = []
+            all_sbp_within_10 = []
+            
+            for subject_idx, results in all_results.items():
+                if test_mins in results:
+                    metrics = results[test_mins]
+                    file.write(f"{subject_idx:7d} |  {test_mins:15d} | {metrics['dbp_rmse']:8.2f} | {metrics['sbp_rmse']:8.2f} | "
+                          f"{metrics['dbp_corr']:5.2f} | {metrics['sbp_corr']:5.2f} | "
+                          f" {metrics['dbp_within_10']:18.2f} |  {metrics['sbp_within_10']:18.2f}\n")
+                    
+                    all_dbp_rmse.append(metrics['dbp_rmse'])
+                    all_sbp_rmse.append(metrics['sbp_rmse'])
+                    all_dbp_corr.append(metrics['dbp_corr'])
+                    all_sbp_corr.append(metrics['sbp_corr'])
+                    all_dbp_within_10.append(metrics['dbp_within_10'])
+                    all_sbp_within_10.append(metrics['sbp_within_10'])
+            
+            mean_dbp_rmse = np.mean(all_dbp_rmse)
+            mean_sbp_rmse = np.mean(all_sbp_rmse)
+            mean_dbp_corr = np.mean(all_dbp_corr)
+            mean_sbp_corr = np.mean(all_sbp_corr)
+            mean_dbp_within_10 = np.mean(all_dbp_within_10)
+            mean_sbp_within_10 = np.mean(all_sbp_within_10)
+            
+            file.write("   Mean |  {0:15d} | {1:8.2f} | {2:8.2f} | {3:5.2f} | {4:5.2f} |  {5:18.2f} |  {6:18.2f}\n".format(
+                test_mins, mean_dbp_rmse, mean_sbp_rmse, mean_dbp_corr, mean_sbp_corr, 
+                mean_dbp_within_10, mean_sbp_within_10))
     
-    for subject_idx, results in all_results.items():
-        for mins, metrics in results.items():
-            print(f"{subject_idx:7d} | {mins:15d} | {metrics['dbp_rmse']:8.2f} | {metrics['sbp_rmse']:8.2f} | "
-                  f"{metrics['dbp_within_10']:18.2f} | {metrics['sbp_within_10']:18.2f}")
+    print("Results have been saved to 'dann_results_summary.txt'")
 
 
 if __name__ == "__main__":
