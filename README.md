@@ -23,6 +23,10 @@ The key innovation is the use of a gradient reversal layer that allows the featu
 - SciPy
 - Scikit-learn
 
+```bash
+pip3 install -r requirements.txt
+```
+
 ## Usage
 
 ### Data Generation
