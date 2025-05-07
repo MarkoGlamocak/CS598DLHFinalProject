@@ -30,7 +30,7 @@ The key innovation is the use of a gradient reversal layer that allows the featu
 To generate synthetic bioimpedance data for experimentation:
 
 ```bash
-python Bioimpedance_BP_Data_Generator.py
+python3 Bioimpedance_BP_Data_Generator.py
 ```
 
 This will create a `data` directory with synthetic bioimpedance signals for 11 subjects.
@@ -40,7 +40,7 @@ This will create a `data` directory with synthetic bioimpedance signals for 11 s
 To run the DANN experiments:
 
 ```bash
-python main_dann.py
+python3 main_dann.py
 ```
 
 The script will:
