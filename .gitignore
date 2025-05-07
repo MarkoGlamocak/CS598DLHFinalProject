@@ -1,2 +1,5 @@
 myenv/
 __pycache__/
+200epoch_results/
+
+.DS_Store

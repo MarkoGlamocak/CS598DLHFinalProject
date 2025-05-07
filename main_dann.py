@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models, optimizers
 from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
+from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
 from scipy.stats import pearsonr
 import flip_gradient
@@ -130,6 +131,18 @@ class DomainAdversarialModel:
             'dbp_true': y_dbp_test,
             'sbp_true': y_sbp_test
         }
+    
+    def save_model(self, save_path):
+        """Save the trained model to disk."""
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
+        if not save_path.endswith('.keras'):
+            save_path = save_path + '.keras'
+        
+        self.combined_model.save(save_path)
+        print(f"Model saved to {save_path}")
+        
+        return save_path
 
 
 def plot_consolidated_bland_altman(all_runs_metrics, test_subject_idx, test_mins, save_dir='results'):
@@ -346,7 +359,7 @@ class DataGenerator(tf.keras.utils.Sequence):
 
 
 def run_experiment(subjects_data, test_subject_idx, source_subject_idx=None, target_subject_idx=None, 
-                   test_mins=4, epochs=100, batch_size=100):
+                   test_mins=4, epochs=100, batch_size=100, save_model=True):
     """
     Run a DANN experiment with specified subjects and training durations.
     
@@ -358,6 +371,7 @@ def run_experiment(subjects_data, test_subject_idx, source_subject_idx=None, tar
     test_mins: Minutes of data to use from test subject (3, 4, or 5)
     epochs: Number of training epochs
     batch_size: Batch size for training
+    save_model: Whether to save the model after training
     
     Returns:
     Evaluation metrics for the test subject
@@ -449,7 +463,26 @@ def run_experiment(subjects_data, test_subject_idx, source_subject_idx=None, tar
     print(f"Evaluating on test subject (Subject {test_subject_idx})...")
     metrics = dann_model.evaluate(X_test_eval, y_dbp_test_eval, y_sbp_test_eval)
     
+    if save_model:
+        save_dir = f"saved_models/subject_{test_subject_idx}_{test_mins}mins"
+        os.makedirs(save_dir, exist_ok=True)
+        dann_model.save_model(os.path.join(save_dir, "dann_model"))
+    
     return metrics, history, dann_model
+
+
+def load_model(model_path):
+    """Load a saved model with custom GradientReversal layer."""
+
+    if not model_path.endswith('.keras'):
+        model_path = model_path + '.keras'
+
+    custom_objects = {'GradientReversal': flip_gradient.GradientReversal}
+
+    loaded_model = load_model(model_path, custom_objects=custom_objects)
+    print(f"Model loaded from {model_path}")
+
+    return loaded_model
 
 
 def main():
@@ -458,6 +491,8 @@ def main():
 
     results_dir = 'bland_altman_plots'
     os.makedirs(results_dir, exist_ok=True)
+
+    os.makedirs('saved_models', exist_ok=True)
 
     # Load and preprocess data for all subjects
     subjects_data = data_preprocess()
@@ -520,7 +555,8 @@ def main():
                     target_subject_idx=target_subject_idx,
                     test_mins=test_mins,
                     epochs=100,
-                    batch_size=100
+                    batch_size=100,
+                    save_model=True
                 )
                 
                 duration_results.append(metrics)
